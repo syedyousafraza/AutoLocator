@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Locator Generator</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        textarea { width: 100%; height: 150px; margin-bottom: 10px; }
+        button { margin: 5px 0; padding: 10px 20px; }
+        pre { background-color: #f4f4f4; padding: 10px; border: 1px solid #ddd; }
+    </style>
+</head>
+<body>
+
+<h2>Locator Generator</h2>
+<textarea id="domInput" placeholder="Paste the DOM here..."></textarea>
+
+<div>
+    <button onclick="generateLocators('id')">ID Locators</button>
+    <button onclick="generateLocators('class')">Class Locators</button>
+    <button onclick="generateLocators('name')">Name Locators</button>
+    <button onclick="generateLocators('tag')">Tag Name Locators</button>
+    <button onclick="generateLocators('xpath')">XPath Locators</button>
+    <button onclick="generateLocators('css')">CSS Locators</button>
+</div>
+
+<h3>Generated Locators</h3>
+<pre id="output"></pre>
+
+<script>
+    function generateLocators(strategy) {
+        const domInput = document.getElementById('domInput').value;
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(domInput, 'text/html');
+        let locators = [];
+
+        switch (strategy) {
+            case 'id':
+                locators = Array.from(doc.querySelectorAll('[id]')).map(el => `#${el.id}`);
+                break;
+            case 'class':
+                locators = Array.from(doc.querySelectorAll('[class]')).map(el => `.${el.className.split(' ').join('.')}`);
+                break;
+            case 'name':
+                locators = Array.from(doc.querySelectorAll('[name]')).map(el => `[name="${el.name}"]`);
+                break;
+            case 'tag':
+                locators = Array.from(doc.getElementsByTagName('*')).map(el => el.tagName.toLowerCase());
+                break;
+            case 'xpath':
+                locators = Array.from(doc.querySelectorAll('*')).map(el => generateXPath(el));
+                break;
+            case 'css':
+                locators = Array.from(doc.querySelectorAll('*')).map(el => el.tagName.toLowerCase() + 
+                    (el.id ? `#${el.id}` : '') + 
+                    (el.className ? `.${el.className.split(' ').join('.')}` : ''));
+                break;
+        }
+
+        document.getElementById('output').textContent = locators.join('\n');
+    }
+
+    function generateXPath(element) {
+        if (element.id) return `//*[@id="${element.id}"]`;
+        const path = [];
+        while (element.nodeType === Node.ELEMENT_NODE) {
+            let selector = element.nodeName.toLowerCase();
+            if (element.previousElementSibling) {
+                let sib = element.previousElementSibling;
+                let nth = 1;
+                while (sib) {
+                    if (sib.nodeName.toLowerCase() === selector) nth++;
+                    sib = sib.previousElementSibling;
+                }
+                selector += `:nth-of-type(${nth})`;
+            }
+            path.unshift(selector);
+            element = element.parentNode;
+        }
+        return path.length ? `/${path.join('/')}` : null;
+    }
+</script>
+
+</body>
+</html>
