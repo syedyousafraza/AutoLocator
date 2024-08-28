@@ -8,11 +8,21 @@
         textarea { width: 100%; height: 150px; margin-bottom: 10px; }
         button { margin: 5px 0; padding: 10px 20px; }
         pre { background-color: #f4f4f4; padding: 10px; border: 1px solid #ddd; }
+        .note { color: red; margin-top: 10px; }
     </style>
 </head>
 <body>
 
 <h2>Locator Generator</h2>
+
+<!-- Radio buttons for framework selection -->
+<div>
+    <label><input type="radio" name="framework" value="selenium" checked> Selenium</label>
+    <label><input type="radio" name="framework" value="cypress"> Cypress</label>
+    <label><input type="radio" name="framework" value="playwright"> Playwright</label>
+    <label><input type="radio" name="framework" value="none"> None</label>
+</div>
+
 <textarea id="domInput" placeholder="Paste the DOM here..."></textarea>
 
 <div>
@@ -26,65 +36,50 @@
 
 <h3>Generated Locators</h3>
 <pre id="output"></pre>
+<div id="note" class="note"></div>
 
 <script>
     function generateLocators(strategy) {
-        // Get the value from the textarea where the DOM is pasted
-        const domInput = document.getElementById('domInput').value.trim();
+        const domInput = document.getElementById('domInput').value;
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(domInput, 'text/html');
+        let locators = [];
+        const framework = document.querySelector('input[name="framework"]:checked').value;
+        const noteElement = document.getElementById('note');
+        noteElement.textContent = ''; // Clear any previous notes
 
-        // Check if the textarea is empty
-        if (!domInput) {
-            document.getElementById('output').textContent = 'Please paste valid HTML content into the textarea.';
-            return;
+        switch (strategy) {
+            case 'id':
+                locators = Array.from(doc.querySelectorAll('[id]')).map(el => el.id ? generateScript(`#${el.id}`, framework, strategy) : '');
+                break;
+            case 'class':
+                locators = Array.from(doc.querySelectorAll('[class]')).map(el => el.className ? generateScript(`.${el.className.split(' ').join('.')}`, framework, strategy) : '');
+                break;
+            case 'name':
+                locators = Array.from(doc.querySelectorAll('[name]')).map(el => el.name ? generateScript(`[name="${el.name}"]`, framework, strategy) : '');
+                break;
+            case 'tag':
+                locators = Array.from(doc.getElementsByTagName('*')).map(el => el.tagName ? generateScript(el.tagName.toLowerCase(), framework, strategy) : '');
+                break;
+            case 'xpath':
+                locators = Array.from(doc.querySelectorAll('*')).map(el => generateScript(generateXPath(el), framework, strategy));
+                if (framework === 'cypress') {
+                    noteElement.textContent = 'Note: Cypress requires the "cypress-xpath" plugin for XPath support.';
+                }
+                break;
+            case 'css':
+                locators = Array.from(doc.querySelectorAll('*')).map(el => {
+                    let cssSelector = el.tagName.toLowerCase() + 
+                                      (el.id ? `#${el.id}` : '') + 
+                                      (el.className ? `.${el.className.split(' ').join('.')}` : '');
+                    return generateScript(cssSelector, framework, strategy);
+                });
+                break;
         }
 
-        try {
-            // Parse the pasted HTML string into a document object
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(domInput, 'text/html');
-
-            // Initialize an array to store the locators
-            let locators = [];
-
-            // Switch statement to handle different strategies for locator generation
-            switch (strategy) {
-                case 'id':
-                    locators = Array.from(doc.querySelectorAll('[id]')).map(el => `#${el.id}`);
-                    break;
-                case 'class':
-                    locators = Array.from(doc.querySelectorAll('[class]')).map(el => `.${el.className.split(' ').join('.')}`);
-                    break;
-                case 'name':
-                    locators = Array.from(doc.querySelectorAll('[name]')).map(el => `[name="${el.name}"]`);
-                    break;
-                case 'tag':
-                    locators = Array.from(doc.getElementsByTagName('*')).map(el => el.tagName.toLowerCase());
-                    break;
-                case 'xpath':
-                    locators = Array.from(doc.querySelectorAll('*')).map(el => generateXPath(el));
-                    break;
-                case 'css':
-                    locators = Array.from(doc.querySelectorAll('*')).map(el => {
-                        const tag = el.tagName.toLowerCase();
-                        const id = el.id ? `#${el.id}` : '';
-                        const classNames = el.className ? `.${el.className.split(' ').join('.')}` : '';
-                        return `${tag}${id}${classNames}`;
-                    });
-                    break;
-                default:
-                    locators = ['Invalid strategy selected'];
-            }
-
-            // Display the generated locators in the pre element
-            document.getElementById('output').textContent = locators.join('\n') || 'No locators found for the selected strategy.';
-        } catch (error) {
-            // Error handling for invalid HTML
-            document.getElementById('output').textContent = 'Invalid DOM input. Please ensure it\'s correct HTML.';
-            console.error('Error parsing DOM:', error);
-        }
+        document.getElementById('output').textContent = locators.filter(Boolean).join('\n');
     }
 
-    // Function to generate XPath locators
     function generateXPath(element) {
         if (element.id) return `//*[@id="${element.id}"]`;
         const path = [];
@@ -103,6 +98,43 @@
             element = element.parentNode;
         }
         return path.length ? `/${path.join('/')}` : null;
+    }
+
+    function generateScript(locator, framework, strategy) {
+        switch (framework) {
+            case 'selenium':
+                switch (strategy) {
+                    case 'id': return `driver.findElement(By.id("${locator.replace('#', '')}"));`;
+                    case 'class': return `driver.findElement(By.className("${locator.replace('.', '')}"));`;
+                    case 'name': return `driver.findElement(By.name("${locator.replace('[name="', '').replace('"]', '')}"));`;
+                    case 'tag': return `driver.findElement(By.tagName("${locator}"));`;
+                    case 'xpath': return `driver.findElement(By.xpath("${locator}"));`;
+                    case 'css': return `driver.findElement(By.cssSelector("${locator}"));`;
+                }
+                break;
+            case 'cypress':
+                switch (strategy) {
+                    case 'id': return `cy.get('${locator}');`;
+                    case 'class': return `cy.get('${locator}');`;
+                    case 'name': return `cy.get('${locator}');`;
+                    case 'tag': return `cy.get('${locator}');`;
+                    case 'xpath': return `cy.xpath('${locator}');`; // Requires cypress-xpath plugin
+                    case 'css': return `cy.get('${locator}');`;
+                }
+                break;
+            case 'playwright':
+                switch (strategy) {
+                    case 'id': return `await page.locator('${locator}');`;
+                    case 'class': return `await page.locator('${locator}');`;
+                    case 'name': return `await page.locator('${locator}');`;
+                    case 'tag': return `await page.locator('${locator}');`;
+                    case 'xpath': return `await page.locator('${locator}');`;
+                    case 'css': return `await page.locator('${locator}');`;
+                }
+                break;
+            case 'none':
+                return locator;
+        }
     }
 </script>
 
