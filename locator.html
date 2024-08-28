@@ -29,37 +29,62 @@
 
 <script>
     function generateLocators(strategy) {
-        const domInput = document.getElementById('domInput').value;
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(domInput, 'text/html');
-        let locators = [];
+        // Get the value from the textarea where the DOM is pasted
+        const domInput = document.getElementById('domInput').value.trim();
 
-        switch (strategy) {
-            case 'id':
-                locators = Array.from(doc.querySelectorAll('[id]')).map(el => `#${el.id}`);
-                break;
-            case 'class':
-                locators = Array.from(doc.querySelectorAll('[class]')).map(el => `.${el.className.split(' ').join('.')}`);
-                break;
-            case 'name':
-                locators = Array.from(doc.querySelectorAll('[name]')).map(el => `[name="${el.name}"]`);
-                break;
-            case 'tag':
-                locators = Array.from(doc.getElementsByTagName('*')).map(el => el.tagName.toLowerCase());
-                break;
-            case 'xpath':
-                locators = Array.from(doc.querySelectorAll('*')).map(el => generateXPath(el));
-                break;
-            case 'css':
-                locators = Array.from(doc.querySelectorAll('*')).map(el => el.tagName.toLowerCase() + 
-                    (el.id ? `#${el.id}` : '') + 
-                    (el.className ? `.${el.className.split(' ').join('.')}` : ''));
-                break;
+        // Check if the textarea is empty
+        if (!domInput) {
+            document.getElementById('output').textContent = 'Please paste valid HTML content into the textarea.';
+            return;
         }
 
-        document.getElementById('output').textContent = locators.join('\n');
+        try {
+            // Parse the pasted HTML string into a document object
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(domInput, 'text/html');
+
+            // Initialize an array to store the locators
+            let locators = [];
+
+            // Switch statement to handle different strategies for locator generation
+            switch (strategy) {
+                case 'id':
+                    locators = Array.from(doc.querySelectorAll('[id]')).map(el => `#${el.id}`);
+                    break;
+                case 'class':
+                    locators = Array.from(doc.querySelectorAll('[class]')).map(el => `.${el.className.split(' ').join('.')}`);
+                    break;
+                case 'name':
+                    locators = Array.from(doc.querySelectorAll('[name]')).map(el => `[name="${el.name}"]`);
+                    break;
+                case 'tag':
+                    locators = Array.from(doc.getElementsByTagName('*')).map(el => el.tagName.toLowerCase());
+                    break;
+                case 'xpath':
+                    locators = Array.from(doc.querySelectorAll('*')).map(el => generateXPath(el));
+                    break;
+                case 'css':
+                    locators = Array.from(doc.querySelectorAll('*')).map(el => {
+                        const tag = el.tagName.toLowerCase();
+                        const id = el.id ? `#${el.id}` : '';
+                        const classNames = el.className ? `.${el.className.split(' ').join('.')}` : '';
+                        return `${tag}${id}${classNames}`;
+                    });
+                    break;
+                default:
+                    locators = ['Invalid strategy selected'];
+            }
+
+            // Display the generated locators in the pre element
+            document.getElementById('output').textContent = locators.join('\n') || 'No locators found for the selected strategy.';
+        } catch (error) {
+            // Error handling for invalid HTML
+            document.getElementById('output').textContent = 'Invalid DOM input. Please ensure it\'s correct HTML.';
+            console.error('Error parsing DOM:', error);
+        }
     }
 
+    // Function to generate XPath locators
     function generateXPath(element) {
         if (element.id) return `//*[@id="${element.id}"]`;
         const path = [];
